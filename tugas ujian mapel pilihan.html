@@ -1,0 +1,249 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZONA CACING</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#101820;color:white;
+ font-family:Arial,sans-serif;overflow:hidden;
+}
+canvas{display:block;width:100vw;height:100vh}
+.hud{
+ position:absolute;top:15px;left:15px;
+ background:#0009;padding:15px 20px;
+ border-radius:15px;line-height:1.8;
+}
+.hud h2{margin:0;color:#7CFC00}
+#menu{
+ position:absolute;inset:0;background:#07131dcc;
+ display:flex;justify-content:center;align-items:center;
+ text-align:center;
+}
+.panel{
+ background:#172b3c;padding:30px;border-radius:20px;
+ width:min(90%,380px);box-shadow:0 0 30px #0008;
+}
+h1{color:#7CFC00}
+button{
+ border:0;background:#7CFC00;color:#102000;
+ padding:14px 28px;border-radius:12px;
+ font-size:17px;font-weight:bold;cursor:pointer;
+}
+#boost{
+ position:absolute;bottom:35px;right:25px;
+ width:85px;height:85px;border-radius:50%;
+ background:#ffb020;color:#442500;
+}
+small{color:#bdcbd8}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div class="hud">
+ <h2>🐛 ZONA CACING</h2>
+ Skor: <b id="score">0</b><br>
+ Rekor: <b id="record">0</b>
+</div>
+
+<button id="boost">BOOST ⚡</button>
+
+<div id="menu">
+ <div class="panel">
+  <h1>🐛 ZONA CAC ING</h1>
+  <p>Jadilah cacing terbesar!</p>
+  <p>Gerakkan mouse atau sentuh layar untuk mengarahkan cacing.</p>
+  <p>Tekan dan tahan BOOST untuk mempercepat.</p>
+  <button onclick="startGame()">MULAI BERMAIN</button>
+  <p><small>Makan makanan dan hindari tubuh sendiri!</small></p>
+ </div>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let W,H,scale=1;
+function resize(){
+ W=canvas.width=innerWidth;
+ H=canvas.height=innerHeight;
+}
+window.addEventListener("resize",resize);
+resize();
+
+let worm,foods,score=0,record=Number(localStorage.getItem("wormRecord"))||0;
+let running=false,angle=0,target={x:0,y:0},boost=false;
+let camera={x:0,y:0};
+let lastTime=0;
+
+document.getElementById("record").textContent=record;
+
+function randomFood(){
+ return {
+  x:Math.random()*2400-1200,
+  y:Math.random()*2400-1200,
+  r:5+Math.random()*7,
+  color:["#ff5252","#ffdc45","#56d9ff","#c77dff","#7cff6b"][Math.floor(Math.random()*5)]
+ };
+}
+
+function startGame(){
+ worm=[];
+ score=0;
+ angle=0;
+ camera={x:0,y:0};
+ for(let i=0;i<25;i++){
+  worm.push({x:0-i*8,y:0});
+ }
+ foods=Array.from({length:350},randomFood);
+ target={x:W/2+100,y:H/2};
+ running=true;
+ document.getElementById("score").textContent=0;
+ document.getElementById("menu").style.display="none";
+ lastTime=performance.now();
+ requestAnimationFrame(loop);
+}
+
+function pointer(e){
+ const rect=canvas.getBoundingClientRect();
+ target.x=e.clientX-rect.left;
+ target.y=e.clientY-rect.top;
+}
+canvas.addEventListener("pointermove",pointer);
+canvas.addEventListener("pointerdown",pointer);
+
+const boostButton=document.getElementById("boost");
+boostButton.addEventListener("pointerdown",e=>{
+ e.preventDefault();boost=true;
+});
+boostButton.addEventListener("pointerup",()=>boost=false);
+boostButton.addEventListener("pointerleave",()=>boost=false);
+boostButton.addEventListener("pointercancel",()=>boost=false);
+
+function drawFood(f){
+ ctx.fillStyle=f.color;
+ ctx.beginPath();
+ ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+ ctx.fill();
+ ctx.fillStyle="#ffffff55";
+ ctx.beginPath();
+ ctx.arc(f.x-2,f.y-2,2,0,Math.PI*2);
+ ctx.fill();
+}
+
+function endGame(){
+ running=false;
+ boost=false;
+ document.getElementById("menu").style.display="flex";
+ document.querySelector(".panel").innerHTML=`
+ <h1>GAME OVER!</h1>
+ <h2>Skor: ${score}</h2>
+ <p>Cacingmu sudah berjuang hebat!</p>
+ <button onclick="startGame()">MAIN LAGI</button>
+ `;
+}
+
+function loop(time){
+ if(!running)return;
+
+ const dt=Math.min((time-lastTime)/16.67,2);
+ lastTime=time;
+
+ const head=worm[0];
+ const dx=target.x-W/2;
+ const dy=target.y-H/2;
+
+ if(Math.hypot(dx,dy)>5){
+  const desired=Math.atan2(dy,dx);
+  let diff=Math.atan2(Math.sin(desired-angle),Math.cos(desired-angle));
+  angle+=Math.max(-0.09*dt,Math.min(0.09*dt,diff));
+ }
+
+ const speed=boost?4.8:2.6;
+ const step=speed*dt;
+
+ const nx=head.x+Math.cos(angle)*step;
+ const ny=head.y+Math.sin(angle)*step;
+
+ worm.unshift({x:nx,y:ny});
+
+ // Makan makanan
+ for(let i=foods.length-1;i>=0;i--){
+  const f=foods[i];
+  if(Math.hypot(nx-f.x,ny-f.y)<f.r+12){
+   foods.splice(i,1);
+   score+=10;
+   document.getElementById("score").textContent=score;
+   foods.push(randomFood());
+
+   if(score>record){
+    record=score;
+    localStorage.setItem("wormRecord",record);
+    document.getElementById("record").textContent=record;
+   }
+  }
+ }
+
+ const desiredLength=25+Math.floor(score/10)*1.3;
+ while(worm.length>desiredLength)worm.pop();
+
+ // Kamera mengikuti cacing
+ camera.x=nx-W/2;
+ camera.y=ny-H/2;
+
+ // Gambar dunia
+ ctx.fillStyle="#152b25";
+ ctx.fillRect(0,0,W,H);
+
+ ctx.save();
+ ctx.translate(-camera.x,-camera.y);
+
+ // Grid
+ ctx.strokeStyle="#ffffff0d";
+ ctx.lineWidth=1;
+ for(let x=Math.floor(camera.x/50)*50;x<camera.x+W;x+=50){
+  ctx.beginPath();ctx.moveTo(x,camera.y);ctx.lineTo(x,camera.y+H);ctx.stroke();
+ }
+ for(let y=Math.floor(camera.y/50)*50;y<camera.y+H;y+=50){
+  ctx.beginPath();ctx.moveTo(camera.x,y);ctx.lineTo(camera.x+W,y);ctx.stroke();
+ }
+
+ foods.forEach(drawFood);
+
+ // Tubuh cacing
+ for(let i=worm.length-1;i>=0;i--){
+  const p=worm[i];
+  const radius=12;
+  ctx.fillStyle=i===0?"#b5ff55":i%2===0?"#6ddc35":"#49bb30";
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,radius,0,Math.PI*2);
+  ctx.fill();
+  if(i===0){
+   ctx.fillStyle="white";
+   ctx.beginPath();
+   ctx.arc(p.x+Math.cos(angle+0.6)*6,p.y+Math.sin(angle+0.6)*6,3,0,Math.PI*2);
+   ctx.arc(p.x+Math.cos(angle-0.6)*6,p.y+Math.sin(angle-0.6)*6,3,0,Math.PI*2);
+   ctx.fill();
+  }
+ }
+
+ // Deteksi tabrakan tubuh sendiri
+ for(let i=15;i<worm.length;i++){
+  if(Math.hypot(nx-worm[i].x,ny-worm[i].y)<17){
+   ctx.restore();
+   endGame();
+   return;
+  }
+ }
+
+ ctx.restore();
+ requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
